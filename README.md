@@ -70,7 +70,7 @@ Set these on **Railway → Variables** or in a local `.env` file:
 
 ### 1. Clone the repository
 ```bash
-git clone https://github.com/yourname/gemini-telegram-bot.git
+git clone https://github.com/syedmoinsha01/gemini-telegram-bot.git
 cd gemini-telegram-bot
 
 2. Install dependencies
