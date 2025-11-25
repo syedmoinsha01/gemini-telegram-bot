@@ -1,9 +1,11 @@
 import os
 import logging
+import asyncio  # NEW
 
 from dotenv import load_dotenv
 from google import genai
 from telegram import Update
+from telegram.constants import ChatAction  # NEW
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -26,15 +28,13 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 # Recommended fast model:
-# docs abhi "gemini-2.5-flash" ko default suggest karte hain
-GEMINI_MODEL = "gemini-2.5-flash"  # agar future me naam change ho to docs se update kar lena
+GEMINI_MODEL = "gemini-2.5-flash"  # docs se latest naam check kar sakte ho
 
 
 # ------------ Gemini client ------------
 def get_gemini_client() -> genai.Client:
     if not GEMINI_API_KEY:
         raise RuntimeError("GEMINI_API_KEY environment variable set nahi hai.")
-    # Gemini Developer API ke liye simple client
     client = genai.Client(api_key=GEMINI_API_KEY)
     return client
 
@@ -64,7 +64,6 @@ def call_gemini(user_message: str) -> str:
     try:
         text = getattr(response, "text", None)
         if not text:
-            # Kabhi-kabhi candidates/parts ke andar bhi ho sakta hai
             candidates = getattr(response, "candidates", None) or []
             if candidates and hasattr(candidates[0], "content"):
                 parts = getattr(candidates[0].content, "parts", None) or []
@@ -108,8 +107,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     logger.info("User %s: %s", user_id, user_text)
 
+    # --- Show "typing..." while we wait for Gemini ---
     try:
-        reply_text = call_gemini(user_text)
+        await update.message.chat.send_action(ChatAction.TYPING)
+    except Exception:
+        logger.exception("Typing action bhejte waqt error.")
+
+    # Gemini ko call background thread me, taaki event loop block na ho
+    try:
+        reply_text = await asyncio.to_thread(call_gemini, user_text)
     except Exception:
         logger.exception("Unexpected error in call_gemini()")
         reply_text = (
@@ -120,7 +126,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await update.message.reply_text(reply_text)
 
 
-# ------------ Main (no asyncio.run) ------------
+# ------------ Main ------------
 
 def main() -> None:
     if not TELEGRAM_BOT_TOKEN:
